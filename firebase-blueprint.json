@@ -1,0 +1,111 @@
+{
+  "namespaces": {
+    "firestore": {
+      "collections": {
+        "users": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "username": { "type": "string" },
+              "email": { "type": "string" },
+              "phone": { "type": "string" },
+              "region": { "type": "string" },
+              "timezone": { "type": "string" },
+              "createdAt": { "type": "string" },
+              "subType": { "type": "string" },
+              "subStartDate": { "type": "string" },
+              "subEndDate": { "type": "string" },
+              "telegramChatId": { "type": "string" },
+              "telegramToken": { "type": "string" },
+              "referralCode": { "type": "string" },
+              "referredBy": { "type": "string" }
+            },
+            "required": ["username", "email", "phone", "timezone", "createdAt", "subType", "subStartDate", "subEndDate", "telegramToken", "referralCode"]
+          },
+          "rules": "match /users/{userId} { allow read, write: if request.auth != null; }"
+        },
+        "usernames": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "email": { "type": "string" },
+              "uid": { "type": "string" }
+            },
+            "required": ["email", "uid"]
+          },
+          "rules": "match /usernames/{username} { allow read: if true; allow write: if request.auth != null; }"
+        },
+        "events": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "userId": { "type": "string" },
+              "title": { "type": "string" },
+              "eventTime": { "type": "string" },
+              "link": { "type": "string" },
+              "notes": { "type": "string" },
+              "status": { "type": "string" },
+              "createdAt": { "type": "string" },
+              "reminderRules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": { "type": "string" },
+                    "daysBefore": { "type": "number" },
+                    "hoursBefore": { "type": "number" },
+                    "minutesBefore": { "type": "number" },
+                    "times": { "type": "array", "items": { "type": "string" } },
+                    "channels": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            },
+            "required": ["userId", "title", "eventTime", "status", "createdAt", "reminderRules"]
+          },
+          "rules": "match /events/{eventId} { allow read, write: if request.auth != null && resource.data.userId == request.auth.uid; allow create: if request.auth != null; }"
+        },
+        "reminder_templates": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "rules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": { "type": "string" },
+                    "daysBefore": { "type": "number" },
+                    "hoursBefore": { "type": "number" },
+                    "minutesBefore": { "type": "number" },
+                    "times": { "type": "array", "items": { "type": "string" } },
+                    "channels": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            },
+            "required": ["name", "rules"]
+          },
+          "rules": "match /reminder_templates/{templateId} { allow read: if true; allow write: if false; }"
+        },
+        "reminder_logs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "eventId": { "type": "string" },
+              "userId": { "type": "string" },
+              "channel": { "type": "string" },
+              "ruleIndex": { "type": "number" },
+              "timeKey": { "type": "string" },
+              "sentAt": { "type": "string" }
+            },
+            "required": ["eventId", "userId", "channel", "ruleIndex", "timeKey", "sentAt"]
+          },
+          "rules": "match /reminder_logs/{logId} { allow read: if request.auth != null && resource.data.userId == request.auth.uid; allow write: if false; }"
+        }
+      }
+    }
+  }
+}

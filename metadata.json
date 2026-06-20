@@ -1,0 +1,6 @@
+{
+  "name": "منصة تذكير بالمواعيد",
+  "description": "منصة ويب متكاملة لإدارة المواعيد والمهام مع تنبيهات مجدولة عبر تيليجرام وتطبيق سطح المكتب وإشعارات المتصفح المخصصة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
