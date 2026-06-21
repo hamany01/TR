@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { getFirebaseDb } from "../firebase";
+import { getFirebaseDb, firebaseConfig, databaseId } from "../firebase";
 import { 
   collection, 
   query, 
@@ -34,15 +34,17 @@ interface MyEventsProps {
   onEditEvent: (event: EventDoc) => void;
   onAddNewEvent: () => void;
   refreshTrigger: number;
+  onEventsLoaded?: (events: EventDoc[]) => void;
 }
 
-export default function MyEvents({ userId, onEditEvent, onAddNewEvent, refreshTrigger }: MyEventsProps) {
+export default function MyEvents({ userId, onEditEvent, onAddNewEvent, refreshTrigger, onEventsLoaded }: MyEventsProps) {
   const [events, setEvents] = useState<EventDoc[]>([]);
   const [debugLogs, setDebugLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [logsLoading, setLogsLoading] = useState(false);
   const [filter, setFilter] = useState<"all" | "active" | "completed" | "cancelled">("all");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const db = getFirebaseDb();
 
@@ -50,6 +52,7 @@ export default function MyEvents({ userId, onEditEvent, onAddNewEvent, refreshTr
   const fetchEvents = async () => {
     try {
       setLoading(true);
+      setFetchError(null);
       const eventsCol = collection(db, "events");
       const q = query(
         eventsCol, 
@@ -65,8 +68,12 @@ export default function MyEvents({ userId, onEditEvent, onAddNewEvent, refreshTr
       list.sort((a, b) => new Date(a.eventTime).getTime() - new Date(b.eventTime).getTime());
       
       setEvents(list);
-    } catch (err) {
+      if (onEventsLoaded) {
+        onEventsLoaded(list);
+      }
+    } catch (err: any) {
       console.error("Error loading events:", err);
+      setFetchError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -98,6 +105,11 @@ export default function MyEvents({ userId, onEditEvent, onAddNewEvent, refreshTr
   };
 
   useEffect(() => {
+    console.log("🔍 [UI Connection Debug] MyEvents loaded / refreshed:");
+    console.log("   - Firebase Project ID:", firebaseConfig.projectId);
+    console.log("   - Firestore Database ID:", databaseId === undefined ? "undefined (Default Database)" : databaseId);
+    console.log("   - Logged-in User UID:", userId);
+    console.log("   - Exact Query: query(collection(db, 'events'), where('userId', '==', '" + userId + "'))");
     fetchEvents();
     fetchDebugLogs();
   }, [userId, refreshTrigger]);
@@ -155,6 +167,11 @@ export default function MyEvents({ userId, onEditEvent, onAddNewEvent, refreshTr
           <p className="text-xs text-slate-500 mt-1">
             سجل مواعيدك الهامة، حدد الترانزيت المفضل، وحافظ على تنظيم وقتك وجدولك اليومي.
           </p>
+          <div className="mt-3 text-[10px] text-slate-500 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 flex flex-wrap gap-x-4 gap-y-1.5 w-fit font-mono shadow-inner">
+            <span className="flex items-center gap-1">🟢 <strong>Project ID:</strong> <span className="text-slate-800 font-bold">{firebaseConfig.projectId}</span></span>
+            <span className="flex items-center gap-1">📂 <strong>Database ID:</strong> <span className="text-slate-800 font-bold">{databaseId || "undefined (default)"}</span></span>
+            <span className="flex items-center gap-1">👤 <strong>User UID:</strong> <span className="text-slate-800 font-bold">{userId}</span></span>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 md:mr-auto">
@@ -212,6 +229,27 @@ export default function MyEvents({ userId, onEditEvent, onAddNewEvent, refreshTr
               ملغي ({events.filter(e => e.status === "cancelled").length})
             </button>
           </div>
+
+          {fetchError && (
+            <div className="p-4 mb-6 bg-red-50 text-red-800 rounded-2xl flex flex-col gap-3 border border-red-100 text-sm leading-relaxed shadow-sm">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 shrink-0 text-red-500 font-bold" />
+                <strong className="font-extrabold text-red-950">فشل في جلب قائمة الأحداث من Firestore:</strong>
+              </div>
+              <p className="font-mono text-xs text-red-900 bg-red-100/40 p-3 rounded-lg border border-red-100/55 scrollbar-thin max-w-full overflow-x-auto select-all">
+                {fetchError}
+              </p>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => fetchEvents()} 
+                  className="px-4 py-1.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>إعادة المحاولة الآن</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl border border-slate-100 min-h-[300px]">

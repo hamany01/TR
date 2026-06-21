@@ -1,0 +1,416 @@
+import React from "react";
+import { 
+  Bell, 
+  MessageSquare, 
+  Copy, 
+  Tv, 
+  Chrome, 
+  Settings as SettingsIcon, 
+  Clock, 
+  Database,
+  User,
+  LogOut,
+  Mail,
+  Locate
+} from "lucide-react";
+import { motion } from "motion/react";
+
+interface SettingsPageProps {
+  user: any;
+  userProfile: any;
+  botUsername: string;
+  setBotUsername: (val: string) => void;
+  tgNotification: boolean;
+  copiedTg: boolean;
+  copyTgLink: (token: string) => void;
+  showPythonInstructions: boolean;
+  setShowPythonInstructions: (val: boolean) => void;
+  copiedPythonCode: boolean;
+  setCopiedPythonCode: (val: boolean) => void;
+  browserNotification: boolean;
+  requestBrowserPermission: () => void;
+  onLogout: () => void;
+}
+
+export default function SettingsPage({
+  user,
+  userProfile,
+  botUsername,
+  setBotUsername,
+  tgNotification,
+  copiedTg,
+  copyTgLink,
+  showPythonInstructions,
+  setShowPythonInstructions,
+  copiedPythonCode,
+  setCopiedPythonCode,
+  browserNotification,
+  requestBrowserPermission,
+  onLogout
+}: SettingsPageProps) {
+
+  const tgDeepLink = `https://t.me/${botUsername}?start=${userProfile?.telegramToken}`;
+
+  const python_code = `# -*- coding: utf-8 -*-
+import os, sys, time, json, requests
+from plyer import notification
+
+API_BASE_URL = "https://europe-west1-tathkeer-reminders.cloudfunctions.net/desktopApi"
+CONFIG_FILE = "config.json"
+
+def display_welcome_banner():
+    print("=" * 65)
+    print("   🌐 منصة تذكير للمواعيد الذكية - تطبيق سطح المكتب لويندوز 🌐")
+    print("=" * 65)
+
+def load_auth_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f: return json.load(f)
+        except: pass
+    return None
+
+def save_auth_config(data):
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f: json.dump(data, f, ensure_ascii=False, indent=4)
+    except Exception as e: print(f"❌ فشل حفظ الجلسة محلياً: {e}")
+
+def logout_local():
+    if os.path.exists(CONFIG_FILE):
+        try: os.remove(CONFIG_FILE); print("🚀 تم تسجيل الخروج.")
+        except: pass
+
+def login_flow():
+    print("🔐 يرجى تسجيل الدخول:")
+    while True:
+        identifier = input("📧 اسم المستخدم أو البريد: ").strip()
+        password = input("🔑 كلمة المرور: ").strip()
+        if not identifier or not password: continue
+        try:
+            response = requests.post(f"{API_BASE_URL}/login", json={"identifier": identifier, "password": password}, headers={"Content-Type": "application/json"}, timeout=15)
+            res_data = response.json()
+            if response.status_code == 200 and res_data.get("success"):
+                save_auth_config({"username": res_data.get("username"), "email": res_data.get("email"), "desktopAuthToken": res_data.get("desktopAuthToken")})
+                return res_data.get("desktopAuthToken")
+            else:
+                print(f"❌ فشل تسجيل الدخول: {res_data.get('error')}")
+        except Exception as e: print(f"📡 خطأ شبكي: {e}")
+
+def register_completion_on_server(event_id, token, event_title):
+    try:
+        response = requests.post(f"{API_BASE_URL}/complete", json={"eventId": event_id, "desktopAuthToken": token}, headers={"Content-Type": "application/json"}, timeout=10)
+        if response.status_code == 200 and response.json().get("success"):
+            print(f"✅ تم تأكيد إنجاز الحدث: {event_title}")
+    except Exception as e: print(f"📡 خطأ تسجيل الإنجاز: {e}")
+
+def check_for_reminders(token):
+    try:
+        response = requests.post(f"{API_BASE_URL}/events", json={"desktopAuthToken": token}, headers={"Content-Type": "application/json"}, timeout=12)
+        res_data = response.json()
+        if response.status_code == 200 and res_data.get("success"):
+            events = res_data.get("events", [])
+            for item in events:
+                title = item.get("title"); event_id = item.get("eventId"); notes = item.get("notes", "")
+                notification.notify(title=f"🔔 تذكير: {title}", message=f"الوقت: {item.get('eventTime')}\\n📝 {notes}"[:115], app_name="تذكير", timeout=10)
+                print(f"\\n📢 تذكير فوري: <<{title}>>")
+                complete_now = input("اضغط (Enter) للاستمرار، أو اكتب 'c' لتأكيد الإنجاز: ").strip().lower()
+                if complete_now == "c": register_completion_on_server(event_id, token, title)
+    except: pass
+
+def main():
+    display_welcome_banner()
+    config = load_auth_config()
+    token = config.get("desktopAuthToken") if config else login_flow()
+    if not token: token = login_flow()
+    while True:
+        check_for_reminders(token)
+        time.sleep(60)
+
+if __name__ == '__main__':
+    main()`;
+
+  return (
+    <div className="space-y-8" dir="rtl">
+      
+      {/* Settings Header */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+        <h2 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">
+          <SettingsIcon className="w-5 h-5 text-amber-600" />
+          <span>مركز إعدادات النظام وقنوات التنبيه</span>
+        </h2>
+        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+          قم بضبط معرّفات الربط، ومزامنة تطبيق ويندوز الخاص بك، وتفقد بيانات حسابك الشخصي في أي وقت.
+        </p>
+      </div>
+
+      {/* Grid Layout of Settings panels */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        {/* Left Column: Notification Channels Setup */}
+        <div className="space-y-6">
+          <h3 className="text-md font-bold text-slate-800 flex items-center gap-2">
+            <Bell className="w-4.5 h-4.5 text-amber-600" />
+            <span>تفعيل قنوات التنبيه الشاملة</span>
+          </h3>
+
+          {/* Telegram Channel */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-50 pb-3">
+              <span className="flex items-center gap-2 font-bold text-sm text-blue-900">
+                <MessageSquare className="w-5 h-5 text-blue-500" />
+                <span>بوت تيليجرام (Telegram Bot)</span>
+              </span>
+              <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${tgNotification ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
+                {tgNotification ? "مربوط بنجاح" : "غير مربوط"}
+              </span>
+            </div>
+            
+            <p className="text-xs text-slate-500 leading-relaxed">
+              استقبل إشعارات المواعيد أولاً بأول، وتفاعل مع البوت بالضغط على «✅ تم الإنجاز» لتغيير حالة الحدث فوراً من أي مكان في العالم.
+            </p>
+
+            {/* Telegram Username Input */}
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <label className="block text-[10px] font-bold text-slate-500 mb-1.5 text-right">
+                اسم معرّف بوت تيليجرام الخاص بك (Bot Username)
+              </label>
+              <div className="flex items-center gap-1.5" dir="ltr">
+                <span className="text-xs text-slate-400 font-mono">@</span>
+                <input
+                  type="text"
+                  value={botUsername}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^a-zA-Z0-9_]/g, "");
+                    setBotUsername(val);
+                    localStorage.setItem("telegram_bot_username", val);
+                  }}
+                  placeholder="MySchedulerReminder_Bot"
+                  className="flex-1 text-xs py-1.5 px-3 border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 font-mono text-left"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 items-center">
+              <a
+                href={tgDeepLink}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold text-center transition shadow-sm inline-flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>فتح البوت وبدء الربط</span>
+              </a>
+              <button
+                onClick={() => copyTgLink(userProfile?.telegramToken || "")}
+                className="p-2 bg-white border border-blue-200 rounded-xl text-blue-600 hover:bg-blue-50 transition shrink-0 cursor-pointer"
+                title="نسخ رابط الـ start"
+              >
+                {copiedTg ? (
+                  <span className="text-[10px] text-emerald-600 font-bold px-1.5">تم نسخ!</span>
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Windows Desktop Client Column */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-50 pb-3">
+              <span className="flex items-center gap-2 font-bold text-sm text-purple-950">
+                <Tv className="w-5 h-5 text-purple-600" />
+                <span>تطبيق سطح المكتب (Windows)</span>
+              </span>
+              <span className="text-[10px] bg-purple-100 text-purple-800 font-bold rounded px-2.5 py-0.5">برنامج تفاعلي</span>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              قم بتشغيل تطبيق بايثون الصغير على نظام ويندوز لتلقي التنبيهات مع صوت مميز وأزرار التفاعل لإنجاز المهام فوراً.
+            </p>
+
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-2 text-xs text-slate-600 leading-relaxed">
+              <div>
+                <span className="font-bold text-purple-700 block mb-1">1. تثبيت الحزم المطلوبة:</span>
+                <div className="bg-slate-800 text-slate-100 p-2 rounded-lg font-mono text-[10px] flex justify-between items-center" dir="ltr">
+                  <span>pip install requests plyer</span>
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText("pip install requests plyer");
+                      alert("تم نسخ سطر التثبيت!");
+                    }} 
+                    className="text-purple-300 hover:text-white px-2 py-0.5 border border-purple-800 rounded font-sans text-[10px] cursor-pointer"
+                  >
+                    نسخ المعقد
+                  </button>
+                </div>
+              </div>
+              <div className="pt-1.5">
+                <span className="font-bold text-purple-700">2. تسجيل الدخول:</span>
+                <p className="text-[11px] text-slate-400 mt-1 leading-normal">
+                  بمجرد تشغيل السكربت، أدخل نفس بيانات حسابك الحالية للمزامنة مع الخادم.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowPythonInstructions(!showPythonInstructions)}
+                className="flex-1 py-2 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold text-center transition shadow-sm cursor-pointer"
+              >
+                {showPythonInstructions ? "إغلاق نافذة كود المصدر" : "عرض كود السكربت (desktop_client.py)"}
+              </button>
+              
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(python_code);
+                  setCopiedPythonCode(true);
+                  setTimeout(() => setCopiedPythonCode(false), 2000);
+                }}
+                className="p-2 bg-white border border-purple-200 rounded-xl text-purple-600 hover:bg-purple-50 transition shrink-0 cursor-pointer text-xs flex items-center justify-center gap-1.5"
+              >
+                <Copy className="w-4 h-4" />
+                <span>{copiedPythonCode ? "نسخ!" : "نسخ السكربت كاملاً"}</span>
+              </button>
+            </div>
+
+            {showPythonInstructions && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="p-3 bg-slate-900 rounded-xl text-left font-mono text-[10px] text-white/90 overflow-x-auto border border-purple-800 leading-normal"
+                dir="ltr"
+              >
+                <div className="flex justify-between items-center text-slate-400 mb-2 pb-1.5 border-b border-slate-800 font-sans">
+                  <span>desktop_client.py</span>
+                  <span className="text-purple-400">Python 3+</span>
+                </div>
+                <pre className="max-h-48 overflow-y-auto select-all tab-size-4">
+                  {python_code}
+                </pre>
+              </motion.div>
+            )}
+          </div>
+
+          {/* Chrome Notifications */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 font-bold text-sm text-slate-800">
+                <Chrome className="w-5 h-5 text-amber-500" />
+                <span>إشعارات المتصفح (Chrome)</span>
+              </span>
+              <button
+                onClick={requestBrowserPermission}
+                className={`text-xs px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                  browserNotification 
+                    ? "bg-emerald-50 text-emerald-800 cursor-default" 
+                    : "bg-amber-600 text-white hover:bg-amber-700"
+                }`}
+                disabled={browserNotification}
+              >
+                {browserNotification ? "نشطة مسبقاً" : "تفعيل الآن"}
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 leading-relaxed font-normal">
+              تظهر هذه الإشعارات في زاوية الشاشة بمجرد مطابقة أي تذكير، طالما كنت محتفظاً بالتبويب مفتوحاً في الخلفية.
+            </p>
+          </div>
+
+        </div>
+
+        {/* Right Column: Timezone, DB Diagnostics & User Profile details */}
+        <div className="space-y-6">
+          <h3 className="text-md font-bold text-slate-800 flex items-center gap-2">
+            <Clock className="w-4.5 h-4.5 text-amber-600" />
+            <span>إعدادات النظام والمنطقة</span>
+          </h3>
+
+          {/* Timezone panel */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+            <div className="flex items-center gap-2 justify-between border-b border-slate-50 pb-3">
+              <span className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                <Clock className="w-4.5 h-4.5 text-amber-500" />
+                <span>المنطقة الزمنية المفعلة</span>
+              </span>
+              <span className="text-[10px] text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full font-bold">توليد آلي</span>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400">منطقتك الحالية:</span>
+                <span className="font-bold text-slate-800">{userProfile?.timezone || "Asia/Riyadh"}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400">البلد / المنطقة المسجلة:</span>
+                <span className="text-slate-700 font-semibold">{userProfile?.region || "الرياض، المملكة العربية السعودية"}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              * تحسب المنصة تفاضل المواعيد ومطابقتها بالتوافق مع التوقيت العالمي المنسق (UTC) لضمان عدم وصول التنبيهات في الساعات المتأخرة ليلاً.
+            </p>
+          </div>
+
+          {/* Diagnostics */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+            <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider border-b border-slate-50 pb-2">
+              سلامة الاتصال والنظام
+            </h3>
+            <div className="space-y-3 text-xs text-slate-600">
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-1">
+                  <Database className="w-4 h-4 text-emerald-500" />
+                  <span>خادوم قاعدة البيانات Cloud Firestore:</span>
+                </span>
+                <span className="text-emerald-600 font-bold">متصل (قراءة/كتابة)</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>تأمين اسم المستخدم:</span>
+                <span className="text-emerald-600 font-bold">نشط في /usernames</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>معرف الاشتراك الفردي:</span>
+                <span className="font-mono text-[10px] text-slate-400">{user.uid}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Account Profile and Safe Logout */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b border-slate-50 pb-3">
+              <User className="w-4.5 h-4.5 text-amber-500" />
+              <span>إدارة الجلسة والحساب</span>
+            </h3>
+
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-lg">
+                <span className="flex items-center gap-1 text-slate-500">
+                  <Mail className="w-3.5 h-3.5 text-slate-400" />
+                  <span>البريد الإلكتروني:</span>
+                </span>
+                <span className="font-mono text-slate-750 font-semibold">{user.email}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs bg-slate-50 p-2.5 rounded-lg">
+                <span className="flex items-center gap-1 text-slate-500">
+                  <User className="w-3.5 h-3.5 text-slate-400" />
+                  <span>اسم المستخدم المسجل:</span>
+                </span>
+                <span className="font-bold text-slate-800">{userProfile?.username || "---"}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={onLogout}
+              className="w-full py-2.5 px-4 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition border border-rose-100 cursor-pointer"
+              id="settings-logout-btn"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>تسجيل الخروج الآمن</span>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  );
+}

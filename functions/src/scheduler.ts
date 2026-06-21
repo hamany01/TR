@@ -292,3 +292,387 @@ export const runReminderScheduler = functions.pubsub
     return null;
   });
 
+
+/**
+ * دالة تفريغ يدوي عبر HTTP (HTTPS trigger) لتشغيل المجدول يدوياً دون الحاجة لخطة Blaze المدفوعة.
+ * يمكن استدعاؤها عبر متصفح الويب أو أي أداة HTTP لتنفيذ فحص الأحداث والتنبيهات فوراً.
+ */
+export const triggerSchedulerManual = functions.https.onRequest(async (req: any, res: any) => {
+  functions.logger.info("تم تحفيز المجدول يدوياً عبر طلب HTTP HTTPS");
+  const nowUTC = new Date();
+  const db = admin.firestore();
+  const summary: any[] = [];
+  
+  try {
+    const action = req.query.action || req.body?.action;
+    
+    // 1. ميزة محاكاة عملية ربط التلقرام لتسهيل فحص وتفعيل الحسابات
+    if (action === "link_simulation") {
+      const token = req.query.token || req.body?.token || "testadmin_tg_token_2026";
+      const chatIdStr = req.query.chatId || req.body?.chatId;
+      
+      if (!chatIdStr) {
+        res.status(400).json({
+          success: false,
+          message: "خطأ: المعامل 'chatId' مطلوب لإتمام محاكاة الربط بنجاح."
+        });
+        return;
+      }
+      
+      const chatId = parseInt(chatIdStr as string, 10);
+      
+      const usersSnapshot = await db
+        .collection("users")
+        .where("telegramToken", "==", token)
+        .get();
+
+      if (usersSnapshot.empty) {
+        res.status(404).json({
+          success: false,
+          message: `عذراً، لم تنجح محاكاة الربط. لم يتم العثور على أي حساب مستخدم لديه الرمز الفريد: ${token} في مستندات users.`
+        });
+        return;
+      }
+
+      const userDoc = usersSnapshot.docs[0];
+      const userId = userDoc.id;
+
+      await userDoc.ref.update({
+        telegramChatId: chatId,
+        "channelsConfig.telegram": true,
+        updatedAt: nowUTC.toISOString()
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "🎉 [نجاح محاكاة الربط] تم ربط حساب تلغرام وتفعيله بنجاح للمستخدم المطلوب في قاعدة البيانات!",
+        details: {
+          uid: userId,
+          email: userDoc.data().email,
+          username: userDoc.data().username,
+          telegramChatId: chatId,
+          channelsConfigEnabled: true
+        }
+      });
+      return;
+    }
+
+    // 2. ميزة إرسال تذكير فوري مجدول لتجربة وصول الإشعارات فوراً دون انتظار الدقائق المجدولة
+    if (action === "test_send") {
+      const email = req.query.email || req.body?.email || "testadmin@example.com";
+      
+      const usersSnapshot = await db
+        .collection("users")
+        .where("email", "==", email)
+        .get();
+
+      if (usersSnapshot.empty) {
+        res.status(404).json({
+          success: false,
+          message: `لم يتم العثور على أي مستخدم بالبريد الإلكتروني المدخل: ${email}`
+        });
+        return;
+      }
+
+      const userDoc = usersSnapshot.docs[0];
+      const userProfile = userDoc.data();
+      const userId = userDoc.id;
+
+      const eventsSnapshot = await db
+        .collection("events")
+        .where("userId", "==", userId)
+        .where("status", "==", "active")
+        .limit(1)
+        .get();
+
+      if (eventsSnapshot.empty) {
+        res.status(400).json({
+          success: false,
+          message: `تنبيه: يجب إضافة حدث واحد نشط على الأقل للمستخدم ${email} أولاً لتجربة نظام الإرسال.`
+        });
+        return;
+      }
+
+      const eventDoc = eventsSnapshot.docs[0];
+      const eventData = eventDoc.data();
+      const eventId = eventDoc.id;
+      
+      const rule = eventData.reminderRules?.[0] || {
+        type: "minutes_before",
+        minutesBefore: 30,
+        channels: ["telegram"]
+      };
+
+      let realSent = false;
+      let realError = "";
+
+      if (userProfile.telegramChatId) {
+        try {
+          realSent = await sendTelegramReminder(userProfile, eventData, rule, eventId);
+          if (!realSent) {
+            realError = "بوابة الإرسال في تلغرام لم ترجع استجابة صالحة (يرجى مراجعة TELEGRAM_BOT_TOKEN).";
+          }
+        } catch (err: any) {
+          realError = err.message || "فشلت محاولة الإرسال الخارجي.";
+        }
+      } else {
+        realError = "لم يتم تحديد أو ربط الـ telegramChatId الخاص بهذا المستخدم حتى الآن.";
+      }
+
+      const logId = `test_send_${eventId}_${new Date().getTime()}`;
+      await db.collection("reminder_logs").doc(logId).set({
+        eventId,
+        userId,
+        channel: "telegram",
+        timeKey: "test_send_manual_immediate",
+        sentAt: nowUTC.toISOString(),
+        success: realSent,
+        error: realError || null
+      });
+
+      res.status(200).json({
+        success: realSent,
+        message: realSent ? "🎉 تم إرسال التنبيه الفوري بنجاح ووصل لتيليجرام!" : "⚠️ فشل إرسال تنبيه التجربة الفورية.",
+        user: {
+          email: userProfile.email,
+          chatId: userProfile.telegramChatId || null,
+          telegramEnabled: userProfile.channelsConfig?.telegram || false
+        },
+        eventTitle: eventData.title,
+        error: realError || null
+      });
+      return;
+    }
+
+    const eventsSnapshot = await db
+      .collection("events")
+      .where("status", "==", "active")
+      .get();
+
+    if (eventsSnapshot.empty) {
+      res.status(200).json({
+        success: true,
+        message: "تم فحص المجدول يدوياً بنجاح، ولكن لا توجد أحداث نشطة حالياً لمعالجتها.",
+        time: nowUTC.toISOString()
+      });
+      return;
+    }
+
+    const userCache: { [uid: string]: any } = {};
+
+    for (const eventDoc of eventsSnapshot.docs) {
+      const eventId = eventDoc.id;
+      const eventData = eventDoc.data();
+      const userId = eventData.userId;
+
+      if (!userId) continue;
+
+      if (!userCache[userId]) {
+        const userSnap = await db.collection("users").doc(userId).get();
+        if (userSnap.exists()) {
+          userCache[userId] = userSnap.data();
+        } else {
+          userCache[userId] = null;
+        }
+      }
+
+      const userProfile = userCache[userId];
+      if (!userProfile) {
+        summary.push({ eventId, status: "skipped", reason: "user_not_found" });
+        continue;
+      }
+
+      const subEndDate = new Date(userProfile.subEndDate);
+      if (subEndDate < nowUTC) {
+        summary.push({ eventId, status: "skipped", reason: "subscription_expired" });
+        continue;
+      }
+
+      const userTimezone = userProfile.timezone || "Asia/Riyadh";
+      const eventTimeUTC = new Date(eventData.eventTime);
+
+      const rules = eventData.reminderRules || [];
+      for (let ruleIndex = 0; ruleIndex < rules.length; ruleIndex++) {
+        const rule = rules[ruleIndex];
+        const channels = rule.channels || ["telegram", "desktop", "browser"];
+
+        let isTriggered = false;
+        let timeKey = "";
+
+        if (rule.type === "days_before") {
+          const daysBefore = rule.daysBefore || 0;
+          const targetTimes = rule.times || ["09:00"];
+
+          const nowLocal = formatInTimeZone(nowUTC, userTimezone);
+          const eventLocal = formatInTimeZone(eventTimeUTC, userTimezone);
+
+          const dateNowEpoch = Date.UTC(nowLocal.year, nowLocal.month - 1, nowLocal.day);
+          const dateEventEpoch = Date.UTC(eventLocal.year, eventLocal.month - 1, eventLocal.day);
+
+          const diffDays = Math.round((dateEventEpoch - dateNowEpoch) / (1000 * 60 * 60 * 24));
+
+          if (diffDays === daysBefore) {
+            const formatDigit = (num: number) => String(num).padStart(2, "0");
+            const currentLocalHHMM = `${formatDigit(nowLocal.hour)}:${formatDigit(nowLocal.minute)}`;
+
+            for (const targetTime of targetTimes) {
+              if (currentLocalHHMM === targetTime) {
+                isTriggered = true;
+                const targetDayStr = `${nowLocal.year}-${formatDigit(nowLocal.month)}-${formatDigit(nowLocal.day)}`;
+                timeKey = `days_${daysBefore}_${targetDayStr}_${targetTime}`;
+                break;
+              }
+            }
+          }
+        } 
+        else if (rule.type === "minutes_before") {
+          const minutesBefore = rule.minutesBefore || 0;
+          const targetTriggerTime = new Date(eventTimeUTC.getTime() - minutesBefore * 60 * 1000);
+
+          const nowMin = Math.floor(nowUTC.getTime() / (60 * 1000));
+          const targetMin = Math.floor(targetTriggerTime.getTime() / (60 * 1000));
+
+          if (nowMin === targetMin) {
+            isTriggered = true;
+            timeKey = `minutes_${minutesBefore}_${targetTriggerTime.toISOString().substring(0, 16)}`;
+          }
+        } 
+        else if (rule.type === "hours_before") {
+          const hoursBefore = rule.hoursBefore || 0;
+          const targetTriggerTime = new Date(eventTimeUTC.getTime() - hoursBefore * 60 * 60 * 1000);
+
+          const nowMin = Math.floor(nowUTC.getTime() / (60 * 1000));
+          const targetMin = Math.floor(targetTriggerTime.getTime() / (60 * 1000));
+
+          if (nowMin === targetMin) {
+            isTriggered = true;
+            timeKey = `hours_${hoursBefore}_${targetTriggerTime.toISOString().substring(0, 16)}`;
+          }
+        } 
+        else if (rule.type === "at_time") {
+          const nowMin = Math.floor(nowUTC.getTime() / (60 * 1000));
+          const targetMin = Math.floor(eventTimeUTC.getTime() / (60 * 1000));
+
+          if (nowMin === targetMin) {
+            isTriggered = true;
+            timeKey = `at_time_${eventTimeUTC.toISOString().substring(0, 16)}`;
+          }
+        }
+
+        if (isTriggered && timeKey) {
+          for (const ch of channels) {
+            const logId = `${eventId}_${ruleIndex}_${ch}_${timeKey}`;
+            const logDocRef = db.collection("reminder_logs").doc(logId);
+
+            const logDocSnap = await logDocRef.get();
+            if (logDocSnap.exists()) {
+              summary.push({ eventId, ruleIndex, channel: ch, status: "duplicate" });
+              continue;
+            }
+
+            let realSent = false;
+            let realError = "";
+
+            if (ch === "telegram") {
+              if (userProfile.telegramChatId && userProfile.channelsConfig?.telegram === true) {
+                try {
+                  const success = await sendTelegramReminder(userProfile, eventData, rule, eventId);
+                  if (success) {
+                    realSent = true;
+                  } else {
+                    realError = "بوابة الإرسال في تلغرام أرجعت استجابة غير صالحة.";
+                  }
+                } catch (err: any) {
+                  realError = err.message || "فشل إرسال طلب Webhook لتيليجرام.";
+                }
+              } else {
+                realError = "قناة تيليجرام غير مفعّلة في إعدادات المستخدم أو لم يتم ربط الحساب بنجاح بعد.";
+              }
+            } else if (ch === "desktop") {
+              try {
+                await db.collection("desktop_queue").add({
+                  userId,
+                  eventId,
+                  title: eventData.title,
+                  eventTime: eventData.eventTime,
+                  notes: eventData.notes || "",
+                  link: eventData.link || "",
+                  ruleType: rule.type,
+                  timeKey,
+                  sentAt: nowUTC.toISOString(),
+                  read: false
+                });
+                realSent = true;
+              } catch (err: any) {
+                realError = err.message || "فشلت كتابة التذكير لسطح مكتب المستخدم.";
+              }
+            }
+
+            await logDocRef.set({
+              eventId,
+              userId,
+              channel: ch,
+              ruleIndex,
+              timeKey,
+              sentAt: nowUTC.toISOString(),
+              success: (ch === "telegram" || ch === "desktop") ? realSent : true,
+              error: realError || null
+            });
+
+            let notificationStatus = "simulated";
+            let notificationMessage = `تنبيه محاكاة لقناة [${ch}] لحدث: "${eventData.title}"`;
+
+            if (ch === "telegram") {
+              notificationStatus = realSent ? "success" : "failed";
+              notificationMessage = realSent
+                ? `✅ تم إرسال تذكير حقيقي بنجاح إلى تلغرام المشترك: ${userProfile.telegramChatId}`
+                : `⚠️ فشلت محاولة إرسال تنبيه تلغرام للمستلم: ${realError}`;
+            } else if (ch === "desktop") {
+              notificationStatus = realSent ? "success" : "failed";
+              notificationMessage = realSent
+                ? `💻 تم وضع التنبيه بنجاح في قائمة طابور سطح المكتب لجلبه دورياً`
+                : `⚠️ فشل تسجيل التنبيه بطابور سطح المكتب: ${realError}`;
+            }
+
+            await db.collection("debug_notifications").add({
+              userId,
+              eventId,
+              eventTitle: eventData.title,
+              ruleType: rule.type,
+              channel: ch,
+              timeKey,
+              computedSendTime: nowUTC.toISOString(),
+              userTimezone,
+              status: notificationStatus,
+              error: realError || null,
+              message: notificationMessage
+            });
+
+            summary.push({
+              eventId,
+              eventTitle: eventData.title,
+              channel: ch,
+              status: realSent ? "sent" : "failed",
+              error: realError || null
+            });
+          }
+        }
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "تم تشغيل الفحص اليدوي لجدولة المواقيت بنجاح.",
+      processed_events_summary: summary,
+      time: nowUTC.toISOString()
+    });
+
+  } catch (error: any) {
+    functions.logger.error("خطأ مجهول في تشغيل دالة triggerSchedulerManual:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+

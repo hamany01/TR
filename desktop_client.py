@@ -25,7 +25,7 @@ import requests
 from plyer import notification
 
 # رابط الـ Cloud Function الفعلي الذي تم بناؤه في مشروعك
-API_BASE_URL = "https://europe-west1-gen-lang-client-0171705870.cloudfunctions.net/desktopApi"
+API_BASE_URL = "https://europe-west1-tathkeer-reminders.cloudfunctions.net/desktopApi"
 CONFIG_FILE = "config.json"
 
 def display_welcome_banner():

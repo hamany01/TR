@@ -4,6 +4,6 @@ import * as admin from "firebase-admin";
 admin.initializeApp();
 
 // تصدير الدوال المختلفة ومجدول التذكير الديناميكي
-export { runReminderScheduler } from "./scheduler";
+export { runReminderScheduler, triggerSchedulerManual } from "./scheduler";
 export { telegramBotWebhook } from "./telegram";
 export { desktopApi } from "./desktopApi";

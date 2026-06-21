@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0171705870",
-  "appId": "1:794919343543:web:1a4321e97f0618c1778432",
-  "apiKey": "AIzaSyCWQpYyjqCLs1_98n9dyCEpYpYP0L7r2Xw",
-  "authDomain": "gen-lang-client-0171705870.firebaseapp.com",
+  "projectId": "tathkeer-reminders",
+  "appId": "1:1013452641967:web:49feb19d0a1a616569e65a",
+  "apiKey": "AIzaSyDpuCuqT__sjbV6GiWE3a2IMVFONi99_jA",
+  "authDomain": "tathkeer-reminders.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-bd7d9e7c-e0ea-45f7-91e9-2b9872c84e88",
-  "storageBucket": "gen-lang-client-0171705870.firebasestorage.app",
-  "messagingSenderId": "794919343543",
+  "storageBucket": "tathkeer-reminders.firebasestorage.app",
+  "messagingSenderId": "1013452641967",
   "measurementId": ""
 }

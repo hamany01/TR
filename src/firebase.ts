@@ -2,10 +2,10 @@
 
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
-import { getFirestore, collection, limit, query, getDocs, doc, getDoc, setDoc } from "firebase/firestore";
+import { getFirestore, collection, limit, query, getDocs, doc, getDoc, setDoc, where } from "firebase/firestore";
 import firebaseConfigJson from "../firebase-applet-config.json";
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey || "",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain || "",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId || "",
@@ -14,9 +14,9 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId || ""
 };
 
-// If the configured projectId is different from the sandbox (e.g., custom tathkeer-reminders), 
+// If the configured projectId is "tathkeer-reminders" or is different from the original sandbox project, 
 // always connect to the '(default)' database of that project.
-const databaseId = (firebaseConfig.projectId && firebaseConfig.projectId !== firebaseConfigJson.projectId)
+export const databaseId = (firebaseConfig.projectId === "tathkeer-reminders" || (firebaseConfig.projectId && firebaseConfig.projectId !== "gen-lang-client-0171705870"))
   ? undefined
   : (firebaseConfigJson.firestoreDatabaseId || undefined);
 
@@ -59,6 +59,39 @@ if (isFirebaseConfigured && auth && db) {
   const testPassword = "AdminTest123456!";
   const testUsername = "testadmin";
 
+  const seedTestEvent = async (uid: string) => {
+    try {
+      const q = query(collection(db!, "events"), where("userId", "==", uid), limit(10));
+      const eventsSnap = await getDocs(q);
+      const exists = eventsSnap.docs.some(doc => doc.data().title === "اختبار تذكير تيليجرام من المجدول");
+      
+      if (!exists) {
+        const testEventRef = doc(collection(db!, "events"));
+        await setDoc(testEventRef, {
+          userId: uid,
+          title: "اختبار تذكير تيليجرام من المجدول",
+          eventTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          status: "active",
+          notes: "تنبيه تلقائي مجدول للاختبار الفعلي لنظام الإشعارات عبر تيليجرام",
+          link: "https://t.me/MySchedulerReminder_Bot",
+          createdAt: new Date().toISOString(),
+          reminderRules: [
+            {
+              type: "minutes_before",
+              minutesBefore: 30,
+              channels: ["telegram"]
+            }
+          ]
+        });
+        console.log("🎉 [Firebase Debug] Seeded test reminder event for testadmin!");
+      } else {
+        console.log("[Firebase Debug] Test event already exists. No need to seed.");
+      }
+    } catch (e) {
+      console.error("[Firebase Debug] Failed to seed test event:", e);
+    }
+  };
+
   const attemptTestUserCreation = async () => {
     try {
       console.log("[Firebase Debug] Checking / creating test user:", testEmail);
@@ -69,7 +102,28 @@ if (isFirebaseConfigured && auth && db) {
       if (usernameSnapshot.exists()) {
         console.log("🎉 [Firebase Debug] Test user 'testadmin' already exists in Firestore! Attempting test login to verify Firestore & Auth together...");
         const userCred = await signInWithEmailAndPassword(auth, testEmail, testPassword);
-        console.log("🎉 [Firebase Debug] Test login success! User UID:", userCred.user.uid);
+        const uid = userCred.user.uid;
+        console.log("🎉 [Firebase Debug] Test login success! User UID:", uid);
+        
+        // Ensure user document has all required fields (telegramToken, subEndDate, subType)
+        const userDocRef = doc(db, "users", uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          const ud = userDoc.data();
+          if (!ud.telegramToken || !ud.subEndDate) {
+            await setDoc(userDocRef, {
+              ...ud,
+              telegramToken: ud.telegramToken || "testadmin_tg_token_2026",
+              subEndDate: ud.subEndDate || "2030-01-01T00:00:00Z",
+              subType: ud.subType || "free_trial",
+              referralCode: ud.referralCode || "TA2026",
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+            console.log("🎉 [Firebase Debug] Updated existing test user with required fields (token, subscription).");
+          }
+        }
+        
+        await seedTestEvent(uid);
         return;
       }
       
@@ -85,7 +139,10 @@ if (isFirebaseConfigured && auth && db) {
         createdAt: new Date().toISOString(),
         subType: "free_trial",
         subStartDate: new Date().toISOString(),
-        timezone: "Asia/Riyadh"
+        subEndDate: "2030-01-01T00:00:00Z",
+        timezone: "Asia/Riyadh",
+        telegramToken: "testadmin_tg_token_2026",
+        referralCode: "TA2026"
       });
       console.log("🎉 [Firebase Debug] Test User document created in Firestore 'users'!");
 
@@ -96,6 +153,8 @@ if (isFirebaseConfigured && auth && db) {
       });
       console.log("🎉 [Firebase Debug] Username 'testadmin' registered in Firestore 'usernames'!");
 
+      await seedTestEvent(uid);
+
     } catch (err: any) {
       if (err.code === "auth/email-already-in-use") {
         console.log("🎉 [Firebase Debug] Auth account already exists. Signing in to verify credentials and ensure Firestore DB sync...");
@@ -104,18 +163,33 @@ if (isFirebaseConfigured && auth && db) {
           const uid = userCred.user.uid;
           console.log("🎉 [Firebase Debug] Test login success! User UID:", uid);
           
-          const userDoc = await getDoc(doc(db, "users", uid));
+          const userDocRef = doc(db, "users", uid);
+          const userDoc = await getDoc(userDocRef);
           if (!userDoc.exists()) {
-            await setDoc(doc(db, "users", uid), {
+            await setDoc(userDocRef, {
               username: testUsername,
               email: testEmail,
               createdAt: new Date().toISOString(),
               subType: "free_trial",
               subStartDate: new Date().toISOString(),
-              timezone: "Asia/Riyadh"
+              subEndDate: "2030-01-01T00:00:00Z",
+              timezone: "Asia/Riyadh",
+              telegramToken: "testadmin_tg_token_2026",
+              referralCode: "TA2026"
             });
             console.log("🎉 [Firebase Debug] Created missing users document for test account!");
+          } else {
+            const ud = userDoc.data();
+            if (!ud.telegramToken || !ud.subEndDate) {
+              await setDoc(userDocRef, {
+                telegramToken: "testadmin_tg_token_2026",
+                subEndDate: "2030-01-01T00:00:00Z",
+                referralCode: "TA2026"
+              }, { merge: true });
+              console.log("🎉 [Firebase Debug] Merged required fields into test user document.");
+            }
           }
+          await seedTestEvent(uid);
         } catch (loginErr: any) {
           console.error("❌ [Firebase Debug] Login verification failed:", loginErr.code, loginErr.message);
         }
