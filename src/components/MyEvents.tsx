@@ -444,20 +444,23 @@ export default function MyEvents({ userId, userProfile, onEditEvent, onAddNewEve
                           )}
 
                           {ev.status === "active" && (
-                            <button
-                              onClick={() => markAsCompleted(ev.id!)}
-                              disabled={actionLoading === ev.id}
-                              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-300 text-white font-bold rounded-xl text-xs flex items-center gap-1 transition cursor-pointer"
-                              title="تم إنجاز المهمة وإيقاف التنبيهات"
-                              id={`complete-btn-${ev.id}`}
-                            >
-                              {actionLoading === ev.id ? (
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Check className="w-3.5 h-3.5" />
-                              )}
-                              <span>تم الإنجاز ✅</span>
-                            </button>
+                            <div className="flex flex-col items-center sm:items-end gap-1">
+                              <button
+                                onClick={() => markAsCompleted(ev.id!)}
+                                disabled={actionLoading === ev.id}
+                                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-300 text-white font-bold rounded-xl text-xs flex items-center gap-1 transition cursor-pointer"
+                                title="تغيير حالة الحدث إلى مكتمل وإيقاف كافة التذكيرات المستقبلية (هذا الإجراء لا يرسل إشعارات)"
+                                id={`complete-btn-${ev.id}`}
+                              >
+                                {actionLoading === ev.id ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5" />
+                                )}
+                                <span>تم الإنجاز ✅</span>
+                              </button>
+                              <span className="text-[9px] text-slate-400 font-medium">يغير الحالة لـ completed ويوقف التذكيرات (لا يرسل إشعارات)</span>
+                            </div>
                           )}
 
                           <button

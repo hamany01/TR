@@ -12,7 +12,9 @@ import {
   LogOut,
   Mail,
   Locate,
-  RefreshCw
+  RefreshCw,
+  Send,
+  Check
 } from "lucide-react";
 import { motion } from "motion/react";
 import { getFirebaseDb } from "../firebase";
@@ -31,6 +33,7 @@ interface SettingsPageProps {
   copiedPythonCode: boolean;
   setCopiedPythonCode: (val: boolean) => void;
   browserNotification: boolean;
+  browserPermissionState: string;
   requestBrowserPermission: () => void;
   onLogout: () => void;
   onRefreshProfile?: () => void;
@@ -49,6 +52,7 @@ export default function SettingsPage({
   copiedPythonCode,
   setCopiedPythonCode,
   browserNotification,
+  browserPermissionState,
   requestBrowserPermission,
   onLogout,
   onRefreshProfile
@@ -58,6 +62,76 @@ export default function SettingsPage({
   const [savingChatId, setSavingChatId] = useState(false);
   const [chatIdSaveSuccess, setChatIdSaveSuccess] = useState(false);
   const [chatIdSaveError, setChatIdSaveError] = useState("");
+
+  const [testingTelegram, setTestingTelegram] = useState(false);
+  const [tgTestSuccess, setTgTestSuccess] = useState(false);
+  const [tgTestError, setTgTestError] = useState("");
+
+  const [browserTestStatus, setBrowserTestStatus] = useState("");
+
+  const handleTestTelegram = async () => {
+    const chatId = chatIdInput || userProfile?.telegramChatId;
+    if (!chatId) {
+      setTgTestError("⚠️ يرجى إدخال وحفظ معرّف المحادثة (Chat ID) أولاً!");
+      return;
+    }
+
+    const botToken = import.meta.env.VITE_TELEGRAM_BOT_TOKEN || import.meta.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
+      setTgTestError("⚠️ لم يتم العثور على توكن البوت VITE_TELEGRAM_BOT_TOKEN في Secrets المنصة. يرجى تهيئته أولاً.");
+      return;
+    }
+
+    try {
+      setTestingTelegram(true);
+      setTgTestError("");
+      setTgTestSuccess(false);
+
+      const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          chat_id: Number(chatId),
+          text: `🔔 رسالة اختبار فورية من منصة تذكير!\n\nاهلاً بك، تم اختبار ربط حسابك بالبث بنجاح ✅\nمعرّف المحادثة المستهدف: ${chatId}\nوقت الإرسال: ${new Date().toLocaleTimeString("ar-EG")}\nيوم: ${new Date().toLocaleDateString("ar-EG")}`
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.ok) {
+        setTgTestSuccess(true);
+        setTimeout(() => setTgTestSuccess(false), 5000);
+      } else {
+        throw new Error(data.description || "فشل إرسال الطلب إلى خادم تلغرام.");
+      }
+    } catch (err: any) {
+      console.error("error sending test telegram msg:", err);
+      setTgTestError(`فشل الإرسال: ${err.message || err}`);
+    } finally {
+      setTestingTelegram(false);
+    }
+  };
+
+  const handleTestBrowserNotification = () => {
+    if (!("Notification" in window)) {
+      setBrowserTestStatus("⚠️ متصفحك لا يدعم إشعارات الويب.");
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      new Notification("🔔 إشعار اختبار منصة تذكير!", {
+        body: "إذا ظهر لك هذا الإشعار، فهذا يعني أن نظام التنبيهات يعمل بنجاح في متصفحك الحالي! 🎉",
+        icon: "/favicon.ico",
+        dir: "rtl"
+      });
+      setBrowserTestStatus("✅ تم إطلاق إشعار الاختبار بنجاح في متصفحك!");
+      setTimeout(() => setBrowserTestStatus(""), 4000);
+    } else {
+      setBrowserTestStatus("⚠️ يرجى تفعيل أو منح صلاحية إشعارات المتصفح أولاً بالضغط على زر التفعيل!");
+      setTimeout(() => setBrowserTestStatus(""), 5000);
+    }
+  };
 
   React.useEffect(() => {
     if (userProfile?.telegramChatId) {
@@ -223,74 +297,126 @@ if __name__ == '__main__':
               استقبل إشعارات المواعيد أولاً بأول، وتفاعل مع البوت بالضغط على «✅ تم الإنجاز» لتغيير حالة الحدث فوراً من أي مكان في العالم.
             </p>
 
-            {/* Telegram Username Input */}
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-              <label className="block text-[10px] font-bold text-slate-500 mb-1.5 text-right">
-                اسم معرّف بوت تيليجرام الخاص بك (Bot Username)
-              </label>
-              <div className="flex items-center gap-1.5" dir="ltr">
-                <span className="text-xs text-slate-400 font-mono">@</span>
-                <input
-                  type="text"
-                  value={botUsername}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/[^a-zA-Z0-9_]/g, "");
-                    setBotUsername(val);
-                    localStorage.setItem("telegram_bot_username", val);
-                  }}
-                  placeholder="MySchedulerReminder_Bot"
-                  className="flex-1 text-xs py-1.5 px-3 border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 font-mono text-left"
-                />
-              </div>
-            </div>
+            {/* Telegram Settings Section (إعدادات تيليجرام) */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-250/60 space-y-3">
+              <h4 className="text-xs font-bold text-slate-700 border-b border-slate-100 pb-1.5 text-right flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping"></span>
+                <span>إعدادات تيليجرام</span>
+              </h4>
 
-            {/* Telegram Chat ID Input */}
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="block text-[10px] font-bold text-slate-500 text-right font-sans">
-                  معرّف محادثتك في تيليجرام (Chat ID)
+              {/* Telegram Username Input */}
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold text-slate-500 text-right">
+                  اسم معرّف بوت تيليجرام الخاص بك (Bot Username)
                 </label>
-                {userProfile?.telegramChatId && (
-                  <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-bold font-sans">
-                    مربوط ✅
-                  </span>
+                <div className="flex items-center gap-1.5" dir="ltr">
+                  <span className="text-xs text-slate-400 font-mono">@</span>
+                  <input
+                    type="text"
+                    value={botUsername}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/[^a-zA-Z0-9_]/g, "");
+                      setBotUsername(val);
+                      localStorage.setItem("telegram_bot_username", val);
+                    }}
+                    placeholder="MySchedulerReminder_Bot"
+                    className="flex-1 text-xs py-1.5 px-3 border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 font-mono text-left"
+                  />
+                </div>
+              </div>
+
+              {/* Telegram Chat ID Input and Save Button */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[10px] font-bold text-slate-500 text-right font-sans">
+                    معرّف محادثتك في تيليجرام (Chat ID)
+                  </label>
+                  {userProfile?.telegramChatId && (
+                    <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-bold font-sans">
+                      مربوط مسبقاً ✅
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={chatIdInput}
+                    onChange={(e) => setChatIdInput(e.target.value.replace(/[^0-9-]/g, ""))}
+                    placeholder="مثال: 123456789"
+                    className="flex-1 text-xs py-1.5 px-3 border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 font-mono text-left"
+                    dir="ltr"
+                  />
+                  <button
+                    onClick={handleSaveChatId}
+                    disabled={savingChatId}
+                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer disabled:bg-slate-300 shrink-0 shadow-sm"
+                  >
+                    {savingChatId ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+                    <span>حفظ Chat ID</span>
+                  </button>
+                </div>
+                
+                {/* Admin user Chat ID Quick Fill */}
+                <div className="p-2 bg-amber-50/70 border border-amber-200/50 rounded-lg text-right">
+                  <p className="text-[10px] text-amber-800 leading-normal font-medium">
+                    💡 لحساب الأدمن <strong className="font-mono">testadmin</strong>، استخدم الـ Chat ID هذا:{" "}
+                    <button 
+                      type="button"
+                      onClick={() => setChatIdInput("218601139")}
+                      className="text-blue-600 hover:underline font-bold font-mono px-1 py-0.5 bg-white border border-amber-200 rounded cursor-pointer text-[11px]"
+                      title="اضغط للتعيين تلقائياً"
+                    >
+                      218601139
+                    </button>
+                  </p>
+                </div>
+
+                <p className="text-[9px] text-slate-400 leading-normal text-right">
+                  للحصول على رقمك، افتح تيليجرام وأرسل أي رسالة لـ <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline font-bold font-mono">@userinfobot</a>
+                </p>
+                
+                {chatIdSaveSuccess && (
+                  <p className="text-xs text-emerald-700 font-bold bg-emerald-100 border border-emerald-200 p-2 rounded-lg text-center font-sans animate-pulse">
+                    ✨ تم حفظ Chat ID بنجاح! تم تفعيل إشعارات تيليجرام.
+                  </p>
+                )}
+                {chatIdSaveError && (
+                  <p className="text-xs text-rose-700 font-bold bg-rose-50 border border-rose-200 p-2 rounded-lg text-center font-sans">
+                    {chatIdSaveError}
+                  </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={chatIdInput}
-                  onChange={(e) => setChatIdInput(e.target.value.replace(/[^0-9-]/g, ""))}
-                  placeholder="مثال: 123456789"
-                  className="flex-1 text-xs py-1.5 px-3 border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 font-mono text-left"
-                  dir="ltr"
-                />
+
+              {/* Telegram Test Message Section (إرسال رسالة اختبار) */}
+              <div className="pt-3 border-t border-slate-200/60 flex flex-col gap-2">
                 <button
-                  onClick={handleSaveChatId}
-                  disabled={savingChatId}
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer disabled:bg-slate-350 shrink-0"
+                  onClick={handleTestTelegram}
+                  disabled={testingTelegram}
+                  className="w-full py-2 px-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer disabled:bg-slate-100 disabled:text-slate-400"
                 >
-                  {savingChatId ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
-                  <span>حفظ</span>
+                  {testingTelegram ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5 text-blue-500" />
+                  )}
+                  <span>إرسال رسالة اختبار إلى تيليجرام</span>
                 </button>
+
+                {tgTestSuccess && (
+                  <p className="text-xs text-emerald-700 font-bold bg-emerald-100 border border-emerald-200 p-2 rounded-lg text-center font-sans">
+                    🚀 وصلت الرسالة التجريبية بنجاح! تفقد هاتف في تيليجرام.
+                  </p>
+                )}
+                {tgTestError && (
+                  <p className="text-xs text-rose-700 font-bold bg-rose-50 border border-rose-200 p-2 rounded-lg text-right font-sans leading-relaxed">
+                    {tgTestError}
+                  </p>
+                )}
               </div>
-              <p className="text-[10px] text-slate-400 leading-normal text-right">
-                للحصول على رقمك، افتح تيليجرام وأرسل أي رسالة لـ <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline font-bold font-mono">@userinfobot</a>
-              </p>
-              
-              {chatIdSaveSuccess && (
-                <p className="text-[11px] text-emerald-600 font-bold bg-emerald-50/50 p-1.5 rounded-lg text-center font-sans animate-pulse">
-                  تم حفظ Chat ID بنجاح
-                </p>
-              )}
-              {chatIdSaveError && (
-                <p className="text-[11px] text-rose-650 font-bold bg-rose-50/50 p-1.5 rounded-lg text-center font-sans">
-                  {chatIdSaveError}
-                </p>
-              )}
+
             </div>
 
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 items-center pt-2">
               <a
                 href={tgDeepLink}
                 target="_blank"
@@ -391,27 +517,67 @@ if __name__ == '__main__':
           </div>
 
           {/* Chrome Notifications */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 font-bold text-sm text-slate-800">
                 <Chrome className="w-5 h-5 text-amber-500" />
-                <span>إشعارات المتصفح (Chrome)</span>
+                <span>إشعارات المتصفح (Chrome/Edge)</span>
               </span>
               <button
                 onClick={requestBrowserPermission}
                 className={`text-xs px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
                   browserNotification 
                     ? "bg-emerald-50 text-emerald-800 cursor-default" 
-                    : "bg-amber-600 text-white hover:bg-amber-700"
+                    : "bg-amber-600 text-white hover:bg-amber-700 focus:ring-2 focus:ring-amber-500"
                 }`}
                 disabled={browserNotification}
               >
-                {browserNotification ? "نشطة مسبقاً" : "تفعيل الآن"}
+                {browserNotification ? "نشطة ✅" : "طلب في المتصفح"}
               </button>
             </div>
-            <p className="text-xs text-slate-500 leading-relaxed font-normal">
-              تظهر هذه الإشعارات في زاوية الشاشة بمجرد مطابقة أي تذكير، طالما كنت محتفظاً بالتبويب مفتوحاً في الخلفية.
+
+            {/* Browser permission details */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 divide-y divide-slate-100 space-y-1.5 text-xs text-slate-600">
+              <div className="flex justify-between items-center">
+                <span>حالة الإذن الحالية:</span>
+                <span className="font-mono font-bold bg-white border px-2 py-0.5 rounded text-slate-800">
+                  {browserPermissionState}
+                </span>
+              </div>
+              <div className="pt-1.5 flex justify-between items-center text-[10px]">
+                <span className="text-slate-400">تنبيهات حالة الإذن:</span>
+                <span className="text-slate-500">
+                  {browserPermissionState === "granted" && "مسموح بها بالكامل وسلسة 🎉"}
+                  {browserPermissionState === "denied" && "مرفوضة! يرجى إعادة تفعيلها من موقع المتصفح."}
+                  {browserPermissionState === "default" && "لم تمنح الصلاحية بعد. انقر 'طلب' للأعلى."}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-normal font-normal">
+              تظهر هذه الإشعارات في زاوية الشاشة بمجرد مطابقة أي تذكير، طالما كان تبويب المنصة مفتوحاً في الخلفية.
             </p>
+
+            {/* Test button for Browser Notification */}
+            <div className="pt-2 flex flex-col gap-2">
+              <button
+                onClick={handleTestBrowserNotification}
+                className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition border border-slate-200 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Bell className="w-3.5 h-3.5 text-amber-600 animate-swing" />
+                <span>إرسال إشعار اختبار في المتصفح</span>
+              </button>
+
+              {browserTestStatus && (
+                <p className={`text-xs font-bold p-2 rounded-lg text-center ${
+                  browserTestStatus.startsWith("✅") 
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-100" 
+                    : "bg-rose-50 text-rose-805 border border-rose-100"
+                }`}>
+                  {browserTestStatus}
+                </p>
+              )}
+            </div>
           </div>
 
         </div>

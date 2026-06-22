@@ -406,6 +406,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                 copiedPythonCode={copiedPythonCode}
                 setCopiedPythonCode={setCopiedPythonCode}
                 browserNotification={browserNotification}
+                browserPermissionState={browserPermissionState}
                 requestBrowserPermission={requestBrowserPermission}
                 onLogout={onLogout}
                 onRefreshProfile={loadData}
