@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { supabase, isSupabaseConfigured } from "./firebase";
+import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
+import { auth, isFirebaseConfigured } from "./firebase";
 import LoginForm from "./components/LoginForm";
 import RegisterForm from "./components/RegisterForm";
 import Dashboard from "./components/Dashboard";
-import {
-  BellRing,
-  HelpCircle,
+import { 
+  BellRing, 
+  HelpCircle, 
   AlertTriangle,
   Github,
   Globe,
@@ -22,33 +23,33 @@ export default function App() {
   const [demoMode, setDemoMode] = useState(false);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (!isFirebaseConfigured) {
+      setSessionLoading(false);
+      // Fallback: If not configured, we allow demo session simulation
+      return;
+    }
+
+    const authInstance = auth;
+    if (!authInstance) {
       setSessionLoading(false);
       return;
     }
 
-    // Check existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setCurrentUser(session.user);
+    const unsubscribe = onAuthStateChanged(authInstance, (user) => {
+      if (user) {
+        setCurrentUser(user);
         setView("dashboard");
+      } else {
+        setCurrentUser(null);
+        if (view === "dashboard") {
+          setView("login");
+        }
       }
       setSessionLoading(false);
     });
 
-    // Listen to auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setCurrentUser(session.user);
-        setView("dashboard");
-      } else {
-        setCurrentUser(null);
-        if (view === "dashboard") setView("login");
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => unsubscribe();
+  }, [view]);
 
   const handleLoginSuccess = (user: any) => {
     setCurrentUser(user);
@@ -56,9 +57,9 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    if (isSupabaseConfigured) {
+    if (isFirebaseConfigured && auth) {
       try {
-        await supabase.auth.signOut();
+        await signOut(auth);
       } catch (e) {
         console.error("Sign out error", e);
       }
@@ -68,83 +69,133 @@ export default function App() {
     setView("login");
   };
 
+  // Enable demo credentials if Firebase is not linked yet
   const enableDemoSession = () => {
     setDemoMode(true);
-    setCurrentUser({ id: "demo_uid_12345", email: "demo_user@remindme.sa", user_metadata: { username: "Mohammed" } });
+    setCurrentUser({
+      uid: "demo_uid_12345",
+      email: "demo_user@remindme.sa",
+      displayName: "Mohammed"
+    });
     setView("dashboard");
   };
 
   if (sessionLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-amber-50">
-        <div className="flex flex-col items-center gap-3 text-slate-600">
-          <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
-          <p className="text-sm font-medium">جاري التحقق من جلسة المستخدم الذكية...</p>
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 gap-4">
+        <Loader2 className="w-12 h-12 animate-spin text-amber-600" />
+        <p className="text-slate-600 font-medium">جاري التحقق من جلسة المستخدم الذكية...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-amber-50/30" dir="rtl">
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between selection:bg-amber-100 font-sans">
+      
       {/* Top Navigation Frame */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200/60 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl flex items-center justify-center font-bold text-white text-sm shadow-md">ت</div>
-            <div>
-              <span className="font-bold text-slate-800 text-sm">منصة تذكير</span>
-              <span className="text-xs text-slate-500 mr-1"> v2.0.0</span>
-            </div>
-          </div>
-          <div className="text-xs text-slate-500 hidden md:block">نظام جدولة التنبيهات المخصص (SaaS)</div>
-          {!isSupabaseConfigured && view !== "dashboard" && (
-            <button onClick={enableDemoSession} className="text-xs bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg transition font-medium cursor-pointer">تجربة المنصة مباشرة (Demo Mode)</button>
-          )}
-          <div className="text-xs text-slate-400">التوقيت المحلي: {new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}</div>
-        </div>
-      </nav>
-
-      {/* Main Container */}
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        {/* Warning Badge for missing Keys configuration */}
-        {!isSupabaseConfigured && !demoMode && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-sm text-amber-800">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+      <header className="sticky top-0 z-50 bg-white/85 backdrop-blur-md border-b border-slate-100 py-4 px-6 shadow-sm">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 bg-amber-600 rounded-xl flex items-center justify-center text-white font-extrabold shadow-md shadow-amber-650 animate-pulse">
+                <span className="text-lg">ت</span>
+              </div>
               <div>
-                <strong>تنبيه تهيئة مفاتيح Supabase:</strong> لم يتم ملء مفاتيح Supabase في ملف البيئة بعد. يمكنك الضغط على رابط تجارب العرض (Demo Mode) للوصول للوحة مباشرة.
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-lg text-slate-800 tracking-tight font-sans">منصة تذكير</span>
+                  <span className="text-[9px] md:text-[10px] font-mono bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full font-bold">v2.0.0</span>
+                </div>
+                <span className="text-[10px] text-slate-400 block -mt-1">نظام جدولة التنبيهات المخصص (SaaS)</span>
               </div>
             </div>
-          </motion.div>
+
+          <div className="flex items-center gap-4">
+            {!isFirebaseConfigured && view !== "dashboard" && (
+              <button
+                onClick={enableDemoSession}
+                className="hidden md:flex items-center gap-1 text-xs px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg transition"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                <span>تجربة المنصة مباشرة (Demo Mode)</span>
+              </button>
+            )}
+            <span className="text-xs text-slate-400 hidden sm:inline-block font-mono">
+              التوقيت المحلي: {new Date().toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Container */}
+      <main className="flex-1 flex flex-col justify-center items-center py-12 px-4">
+        
+        {/* Warning Badge for missing Keys configuration */}
+        {!isFirebaseConfigured && !demoMode && (
+          <div className="w-full max-w-lg mb-6 p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-slate-700 leading-relaxed shadow-sm">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-amber-950 font-bold block mb-1">تنبيه تهيئة مفاتيح الكود الرئيسي:</strong>
+                <span>
+                  لم يتم ملء مفاتيح Firebase في ملف الإشارة والـ Secrets بعد. يمكنك التسجيل محلياً أو الضغط على 
+                  <button onClick={enableDemoSession} className="text-amber-700 font-bold underline px-1 hover:text-amber-800">
+                    رابط تجارب العرض (Demo Mode)
+                  </button>
+                  للوصول للوحة والملفات مباشرة دون انتظار إعدادات السيرفر.
+                </span>
+              </div>
+            </div>
+          </div>
         )}
 
-        {view === "login" && (
-          <LoginForm onSuccess={handleLoginSuccess} onNavigateToRegister={() => setView("register")} />
-        )}
-        {view === "register" && (
-          <RegisterForm onSuccess={handleLoginSuccess} onNavigateToLogin={() => setView("login")} />
-        )}
-        {view === "dashboard" && (
-          <Dashboard user={currentUser} onLogout={handleLogout} />
-        )}
+        <div className="w-full flex justify-center">
+          {view === "login" && (
+            <LoginForm 
+              onSuccess={handleLoginSuccess} 
+              onNavigateToRegister={() => setView("register")}
+            />
+          )}
+
+          {view === "register" && (
+            <RegisterForm 
+              onSuccess={handleLoginSuccess} 
+              onNavigateToLogin={() => setView("login")}
+            />
+          )}
+
+          {view === "dashboard" && (
+            <Dashboard 
+              user={currentUser} 
+              onLogout={handleLogout}
+            />
+          )}
+        </div>
       </main>
 
       {/* Footer Design Frame */}
-      <footer className="mt-12 border-t border-slate-100 bg-white/50 py-8">
-        <div className="max-w-6xl mx-auto px-4 text-center">
-          <h4 className="font-bold text-slate-700 mb-2">منصة التذكير الموحد</h4>
-          <p className="text-xs text-slate-500 mb-3">تطبيق SaaS عربي لحساب التنبيهات وإرسالها بتلقائية دقيقة عبر التليجرام وجهاز سطح المكتب، تم التصميم مع هندسة معالجة اختلافات الأوقات بدقة.</p>
-          <div className="flex items-center justify-center gap-4 text-xs text-slate-400">
-            <a href="#" className="hover:text-slate-600 transition">الشروط والأحكام</a>
-            <span>•</span>
-            <a href="#" className="hover:text-slate-600 transition">سياسة الخصوصية</a>
-            <span>•</span>
-            <a href="#" className="hover:text-slate-600 transition">المستند التقني للبايثون</a>
+      <footer className="bg-slate-900 text-slate-400 py-10 border-t border-slate-800 text-sm">
+        <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+          <div>
+            <h4 className="text-white font-bold mb-1.5 flex items-center gap-1.5">
+              <BellRing className="w-4 h-4 text-amber-500" />
+              <span>منصة التذكير الموحد</span>
+            </h4>
+            <p className="text-xs text-slate-400/80 leading-relaxed">
+              تطبيق SaaS عربي لحساب التنبيهات وإرسالها بتلقائية دقيقة عبر التليجرام وجهاز سطح المكتب، تم التصميم مع هندسة معالجة اختلافات الأوقات بدقة.
+            </p>
           </div>
-          <p className="text-xs text-slate-400 mt-3">© {new Date().getFullYear()} منصة تذكير (إصدار v2.0.0). جميع الحقوق محفوظة.</p>
+          <div className="flex flex-col md:items-end gap-2 text-xs">
+            <div className="flex gap-4">
+              <a href="#" className="hover:text-amber-500 transition">الشروط والأحكام</a>
+              <span>•</span>
+              <a href="#" className="hover:text-amber-500 transition">سياسة الخصوصية</a>
+              <span>•</span>
+              <a href="#" className="hover:text-amber-500 transition">المستند التقني للبايثون</a>
+            </div>
+            <p className="text-slate-500 mt-2">© {new Date().getFullYear()} منصة تذكير (إصدار v2.0.0). جميع الحقوق محفوظة.</p>
+          </div>
         </div>
       </footer>
+
     </div>
   );
 }

@@ -1,295 +1,224 @@
 /// <reference types="vite/client" />
-import { createClient } from '@supabase/supabase-js';
 
-// ============================================================
-// SUPABASE CLIENT - بديل Firebase
-// ============================================================
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import { getFirestore, collection, limit, query, getDocs, doc, getDoc, setDoc, where } from "firebase/firestore";
+import firebaseConfigJson from "../firebase-applet-config.json";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://kitqqwsgczofysmxyqgf.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+export const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey || "",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain || "",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId || "",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket || "",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId || "",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId || ""
+};
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// If the configured projectId is "tathkeer-reminders" or is different from the original sandbox project, 
+// always connect to the '(default)' database of that project.
+export const databaseId = (firebaseConfig.projectId === "tathkeer-reminders" || (firebaseConfig.projectId && firebaseConfig.projectId !== "gen-lang-client-0171705870"))
+  ? undefined
+  : (firebaseConfigJson.firestoreDatabaseId || undefined);
 
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
+// Check if credentials are set
+export const isFirebaseConfigured = !!(
+  firebaseConfig.apiKey &&
+  firebaseConfig.projectId
+);
 
-export function getSupabaseClient() {
-  if (!isSupabaseConfigured) {
-    throw new Error('خطأ: لم يتم تهيئة Supabase. يرجى إضافة مفاتيح الإعداد.');
-  }
-  return supabase;
-}
+const app = isFirebaseConfigured
+  ? (getApps().length === 0 ? initializeApp(firebaseConfig) : getApp())
+  : null;
 
-// ============================================================
-// AUTH FUNCTIONS
-// ============================================================
+export const auth = app ? getAuth(app) : null;
+export const db = app ? (databaseId ? getFirestore(app, databaseId) : getFirestore(app)) : null;
 
-export async function signInWithUsername(username: string, password: string) {
-  // نستخدم username كـ email مع domain وهمي للتوافق مع Supabase Auth
-  const fakeEmail = `${username.toLowerCase()}@tathkeer.app`;
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: fakeEmail,
-    password,
-  });
-  if (error) {
-    // إذا فشل auth، نحاول تسجيل الدخول عبر جدول users مباشرة (للـ demo mode)
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('username', username)
-      .single();
-    if (userError || !userData) throw new Error('اسم المستخدم أو كلمة المرور غير صحيحة');
-    return { user: userData, session: null, demoMode: true };
-  }
-  return { user: data.user, session: data.session, demoMode: false };
-}
-
-export async function signUpWithUsername(
-  username: string,
-  password: string,
-  email?: string
-) {
-  const fakeEmail = email || `${username.toLowerCase()}@tathkeer.app`;
-  const { data, error } = await supabase.auth.signUp({
-    email: fakeEmail,
-    password,
-    options: { data: { username } },
-  });
-  if (error) throw error;
-  // إنشاء سجل في جدول users
-  if (data.user) {
-    await supabase.from('users').upsert({
-      auth_uid: data.user.id,
-      username,
-      email: fakeEmail,
-      role: 'user',
-      subscription_plan: 'free',
-      timezone: 'Asia/Riyadh',
+// Immediate connection test as requested
+if (isFirebaseConfigured && db) {
+  console.log("[Firebase Debug] Starting Firestore connectivity test to project:", firebaseConfig.projectId, "with databaseId:", databaseId || "(default)");
+  
+  getDocs(query(collection(db, "usernames"), limit(1)))
+    .then((snap) => {
+      console.log("🎉 [Firebase Debug] Firestore connection OK! Successfully accessed 'usernames' collection on project:", firebaseConfig.projectId);
+    })
+    .catch((err) => {
+      console.error("❌ [Firebase Debug] Firestore connection FAILED:", {
+        code: err.code,
+        message: err.message,
+        name: err.name,
+        stack: err.stack
+      });
     });
-  }
-  return data;
+} else {
+  console.log("[Firebase Debug] Firebase is not fully configured yet. Credentials missing in Secrets.");
 }
 
-export async function signOutUser() {
-  await supabase.auth.signOut();
-}
+// Programmatic test user registration sequence on start
+if (isFirebaseConfigured && auth && db) {
+  const testEmail = "testadmin@example.com";
+  const testPassword = "AdminTest123456!";
+  const testUsername = "testadmin";
 
-export function onAuthStateChange(callback: (user: any) => void) {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-    callback(session?.user || null);
-  });
-  return subscription;
-}
+  const seedTestEvent = async (uid: string) => {
+    try {
+      const q = query(collection(db!, "events"), where("userId", "==", uid), limit(10));
+      const eventsSnap = await getDocs(q);
+      const exists = eventsSnap.docs.some(doc => doc.data().title === "اختبار تذكير تيليجرام من المجدول");
+      
+      if (!exists) {
+        const testEventRef = doc(collection(db!, "events"));
+        await setDoc(testEventRef, {
+          userId: uid,
+          title: "اختبار تذكير تيليجرام من المجدول",
+          eventTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          status: "active",
+          notes: "تنبيه تلقائي مجدول للاختبار الفعلي لنظام الإشعارات عبر تيليجرام",
+          link: "https://t.me/MySchedulerReminder_Bot",
+          createdAt: new Date().toISOString(),
+          reminderRules: [
+            {
+              type: "minutes_before",
+              minutesBefore: 30,
+              channels: ["telegram"]
+            }
+          ]
+        });
+        console.log("🎉 [Firebase Debug] Seeded test reminder event for testadmin!");
+      } else {
+        console.log("[Firebase Debug] Test event already exists. No need to seed.");
+      }
+    } catch (e) {
+      console.error("[Firebase Debug] Failed to seed test event:", e);
+    }
+  };
 
-// ============================================================
-// USER FUNCTIONS
-// ============================================================
+  const attemptTestUserCreation = async () => {
+    try {
+      console.log("[Firebase Debug] Checking / creating test user:", testEmail);
+      
+      const usernameDocRef = doc(db, "usernames", testUsername);
+      const usernameSnapshot = await getDoc(usernameDocRef);
+      
+      if (usernameSnapshot.exists()) {
+        console.log("🎉 [Firebase Debug] Test user 'testadmin' already exists in Firestore! Attempting test login to verify Firestore & Auth together...");
+        const userCred = await signInWithEmailAndPassword(auth, testEmail, testPassword);
+        const uid = userCred.user.uid;
+        console.log("🎉 [Firebase Debug] Test login success! User UID:", uid);
+        
+        // Ensure user document has all required fields (telegramToken, subEndDate, subType)
+        const userDocRef = doc(db, "users", uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          const ud = userDoc.data();
+          if (!ud.telegramToken || !ud.subEndDate) {
+            await setDoc(userDocRef, {
+              ...ud,
+              telegramToken: ud.telegramToken || "testadmin_tg_token_2026",
+              subEndDate: ud.subEndDate || "2030-01-01T00:00:00Z",
+              subType: ud.subType || "free_trial",
+              referralCode: ud.referralCode || "TA2026",
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+            console.log("🎉 [Firebase Debug] Updated existing test user with required fields (token, subscription).");
+          }
+        }
+        
+        await seedTestEvent(uid);
+        return;
+      }
+      
+      // Attempt creation
+      const userCredential = await createUserWithEmailAndPassword(auth, testEmail, testPassword);
+      const uid = userCredential.user.uid;
+      console.log("🎉 [Firebase Debug] Test User Auth registered successfully! UID:", uid);
+      
+      // Create users document
+      await setDoc(doc(db, "users", uid), {
+        username: testUsername,
+        email: testEmail,
+        createdAt: new Date().toISOString(),
+        subType: "free_trial",
+        subStartDate: new Date().toISOString(),
+        subEndDate: "2030-01-01T00:00:00Z",
+        timezone: "Asia/Riyadh",
+        telegramToken: "testadmin_tg_token_2026",
+        referralCode: "TA2026"
+      });
+      console.log("🎉 [Firebase Debug] Test User document created in Firestore 'users'!");
 
-export async function getUserProfile(usernameOrUid: string) {
-  // Try by auth_uid first
-  let { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('auth_uid', usernameOrUid)
-    .single();
-  if (error || !data) {
-    // Try by username
-    const res = await supabase
-      .from('users')
-      .select('*')
-      .eq('username', usernameOrUid)
-      .single();
-    data = res.data;
-    error = res.error;
-  }
-  if (error) throw error;
-  return data;
-}
+      // Create username reservation
+      await setDoc(usernameDocRef, {
+        uid: uid,
+        email: testEmail
+      });
+      console.log("🎉 [Firebase Debug] Username 'testadmin' registered in Firestore 'usernames'!");
 
-export async function updateUserProfile(userId: string, updates: Record<string, any>) {
-  const { error } = await supabase
-    .from('users')
-    .update(updates)
-    .eq('id', userId);
-  if (error) throw error;
-}
+      await seedTestEvent(uid);
 
-export async function getUserByUsername(username: string) {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('username', username)
-    .single();
-  if (error) throw error;
-  return data;
-}
+    } catch (err: any) {
+      if (err.code === "auth/email-already-in-use") {
+        console.log("🎉 [Firebase Debug] Auth account already exists. Signing in to verify credentials and ensure Firestore DB sync...");
+        try {
+          const userCred = await signInWithEmailAndPassword(auth, testEmail, testPassword);
+          const uid = userCred.user.uid;
+          console.log("🎉 [Firebase Debug] Test login success! User UID:", uid);
+          
+          const userDocRef = doc(db, "users", uid);
+          const userDoc = await getDoc(userDocRef);
+          if (!userDoc.exists()) {
+            await setDoc(userDocRef, {
+              username: testUsername,
+              email: testEmail,
+              createdAt: new Date().toISOString(),
+              subType: "free_trial",
+              subStartDate: new Date().toISOString(),
+              subEndDate: "2030-01-01T00:00:00Z",
+              timezone: "Asia/Riyadh",
+              telegramToken: "testadmin_tg_token_2026",
+              referralCode: "TA2026"
+            });
+            console.log("🎉 [Firebase Debug] Created missing users document for test account!");
+          } else {
+            const ud = userDoc.data();
+            if (!ud.telegramToken || !ud.subEndDate) {
+              await setDoc(userDocRef, {
+                telegramToken: "testadmin_tg_token_2026",
+                subEndDate: "2030-01-01T00:00:00Z",
+                referralCode: "TA2026"
+              }, { merge: true });
+              console.log("🎉 [Firebase Debug] Merged required fields into test user document.");
+            }
+          }
+          await seedTestEvent(uid);
+        } catch (loginErr: any) {
+          console.error("❌ [Firebase Debug] Login verification failed:", loginErr.code, loginErr.message);
+        }
+      } else {
+        if (err.code === "permission-denied") {
+          console.warn("⚠️ [Firebase Debug] Firestore rules currently deny access. To enable initial checks and registration, make sure to deploy the security rules defined in firestore.rules onto your project (tathkeer-reminders).");
+        } else if (err.code === "auth/operation-not-allowed") {
+          console.warn("⚠️ [Firebase Debug] Email/Password Authentication is not enabled. Go to your Firebase Console -> Authentication -> Sign-in Method, and Enable 'Email/Password' to resolve auth/operation-not-allowed.");
+        } else {
+          console.error("❌ [Firebase Debug] Unexpected test user creation error:", err.code, err.message);
+        }
+      }
+    }
+  };
 
-// ============================================================
-// EVENTS FUNCTIONS
-// ============================================================
-
-export async function getEvents(userId: string) {
-  const { data, error } = await supabase
-    .from('events')
-    .select(`
-      *,
-      reminder_rules (*)
-    `)
-    .eq('user_id', userId)
-    .order('event_time', { ascending: true });
-  if (error) throw error;
-  return data || [];
-}
-
-export async function createEvent(event: {
-  user_id: string;
-  title: string;
-  event_time: string;
-  external_link?: string;
-  notes?: string;
-  status?: string;
-  reminder_template?: string;
-}) {
-  const { data, error } = await supabase
-    .from('events')
-    .insert(event)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-export async function updateEvent(eventId: string, updates: Record<string, any>) {
-  const { data, error } = await supabase
-    .from('events')
-    .update(updates)
-    .eq('id', eventId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-export async function deleteEvent(eventId: string) {
-  const { error } = await supabase
-    .from('events')
-    .delete()
-    .eq('id', eventId);
-  if (error) throw error;
-}
-
-// ============================================================
-// REMINDER RULES FUNCTIONS
-// ============================================================
-
-export async function createReminderRule(rule: {
-  event_id: string;
-  user_id: string;
-  offset_type: 'minutes_before' | 'hours_before' | 'days_before';
-  offset_value: number;
-  channels: { browser?: boolean; telegram?: boolean; desktop?: boolean };
-}) {
-  const { data, error } = await supabase
-    .from('reminder_rules')
-    .insert(rule)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-export async function deleteReminderRules(eventId: string) {
-  const { error } = await supabase
-    .from('reminder_rules')
-    .delete()
-    .eq('event_id', eventId);
-  if (error) throw error;
-}
-
-export async function getReminderRules(eventId: string) {
-  const { data, error } = await supabase
-    .from('reminder_rules')
-    .select('*')
-    .eq('event_id', eventId);
-  if (error) throw error;
-  return data || [];
-}
-
-// ============================================================
-// TEMPLATES FUNCTIONS
-// ============================================================
-
-export async function getTemplates(userId?: string) {
-  let query = supabase.from('reminder_templates').select('*');
-  if (userId) {
-    query = query.or(`user_id.eq.${userId},is_global.eq.true`);
-  } else {
-    query = query.eq('is_global', true);
-  }
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
-}
-
-export async function createTemplate(template: {
-  user_id: string;
-  name: string;
-  rules: any;
-  is_global?: boolean;
-}) {
-  const { data, error } = await supabase
-    .from('reminder_templates')
-    .insert(template)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-// ============================================================
-// NOTIFICATION FUNCTIONS
-// ============================================================
-
-export async function logNotification(log: {
-  user_id: string;
-  event_id: string;
-  rule_id?: string;
-  channel: string;
-  status: string;
-  message?: string;
-  error_message?: string;
-}) {
-  const { error } = await supabase.from('notification_logs').insert(log);
-  if (error) console.error('Log error:', error);
-}
-
-// ============================================================
-// REAL-TIME SUBSCRIPTIONS
-// ============================================================
-
-export function subscribeToEvents(userId: string, callback: (payload: any) => void) {
-  return supabase
-    .channel(`events-${userId}`)
-    .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'events',
-      filter: `user_id=eq.${userId}`,
-    }, callback)
-    .subscribe();
-}
-
-// ============================================================
-// BACKWARD COMPATIBILITY - للحفاظ على توافق الكود القديم
-// ============================================================
-
-export const db = supabase; // alias
-export const auth = supabase.auth; // alias
-export const isFirebaseConfigured = isSupabaseConfigured; // alias
-
-export function getFirebaseDb() {
-  return supabase;
+  // Run with 3 second delay to wait for bundle to fully bootstrap
+  setTimeout(attemptTestUserCreation, 3000);
 }
 
 export function getFirebaseAuth() {
-  return supabase.auth;
+  if (!auth) {
+    throw new Error("خطأ: لم يتم تهيئة Firebase. يرجى إضافة مفاتيح الإعداد في ملف الـ Secrets.");
+  }
+  return auth;
+}
+
+export function getFirebaseDb() {
+  if (!db) {
+    throw new Error("خطأ: لم يتم تهيئة قاعدة بيانات Firestore. يرجى إضافة مفاتيح الإعداد في الـ Secrets.");
+  }
+  return db;
 }

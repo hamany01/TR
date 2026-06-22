@@ -368,6 +368,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             {activeTab === "events" && (
               <MyEvents
                 userId={user.uid}
+                userProfile={userProfile}
                 refreshTrigger={refreshEventsTrigger}
                 onAddNewEvent={() => {
                   setEventToEdit(null);
@@ -407,6 +408,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                 browserNotification={browserNotification}
                 requestBrowserPermission={requestBrowserPermission}
                 onLogout={onLogout}
+                onRefreshProfile={loadData}
               />
             )}
           </motion.div>

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { 
   Bell, 
   MessageSquare, 
@@ -11,9 +11,12 @@ import {
   User,
   LogOut,
   Mail,
-  Locate
+  Locate,
+  RefreshCw
 } from "lucide-react";
 import { motion } from "motion/react";
+import { getFirebaseDb } from "../firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 interface SettingsPageProps {
   user: any;
@@ -30,6 +33,7 @@ interface SettingsPageProps {
   browserNotification: boolean;
   requestBrowserPermission: () => void;
   onLogout: () => void;
+  onRefreshProfile?: () => void;
 }
 
 export default function SettingsPage({
@@ -46,8 +50,58 @@ export default function SettingsPage({
   setCopiedPythonCode,
   browserNotification,
   requestBrowserPermission,
-  onLogout
+  onLogout,
+  onRefreshProfile
 }: SettingsPageProps) {
+
+  const [chatIdInput, setChatIdInput] = useState<string>(userProfile?.telegramChatId ? String(userProfile.telegramChatId) : "");
+  const [savingChatId, setSavingChatId] = useState(false);
+  const [chatIdSaveSuccess, setChatIdSaveSuccess] = useState(false);
+  const [chatIdSaveError, setChatIdSaveError] = useState("");
+
+  React.useEffect(() => {
+    if (userProfile?.telegramChatId) {
+      setChatIdInput(String(userProfile.telegramChatId));
+    }
+  }, [userProfile?.telegramChatId]);
+
+  const handleSaveChatId = async () => {
+    if (!chatIdInput.trim()) {
+      setChatIdSaveError("يرجى إدخال معرّف المحادثة أولاً!");
+      return;
+    }
+    const chatIdNum = Number(chatIdInput);
+    if (isNaN(chatIdNum)) {
+      setChatIdSaveError("معرّف المحادثة يجب أن يكون رقماً صحيحاً!");
+      return;
+    }
+
+    try {
+      setSavingChatId(true);
+      setChatIdSaveError("");
+      setChatIdSaveSuccess(false);
+
+      const db = getFirebaseDb();
+      const userDocRef = doc(db, "users", user.uid);
+      await setDoc(userDocRef, {
+        telegramChatId: chatIdNum,
+        channelsConfig: {
+          telegram: true
+        }
+      }, { merge: true });
+
+      setChatIdSaveSuccess(true);
+      if (onRefreshProfile) {
+        onRefreshProfile();
+      }
+      setTimeout(() => setChatIdSaveSuccess(false), 4000);
+    } catch (err: any) {
+      console.error("Error saving Telegram Chat ID:", err);
+      setChatIdSaveError(`فشل الحفظ: ${err.message || err}`);
+    } finally {
+      setSavingChatId(false);
+    }
+  };
 
   const tgDeepLink = `https://t.me/${botUsername}?start=${userProfile?.telegramToken}`;
 
@@ -188,6 +242,52 @@ if __name__ == '__main__':
                   className="flex-1 text-xs py-1.5 px-3 border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 font-mono text-left"
                 />
               </div>
+            </div>
+
+            {/* Telegram Chat ID Input */}
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-[10px] font-bold text-slate-500 text-right font-sans">
+                  معرّف محادثتك في تيليجرام (Chat ID)
+                </label>
+                {userProfile?.telegramChatId && (
+                  <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-bold font-sans">
+                    مربوط ✅
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={chatIdInput}
+                  onChange={(e) => setChatIdInput(e.target.value.replace(/[^0-9-]/g, ""))}
+                  placeholder="مثال: 123456789"
+                  className="flex-1 text-xs py-1.5 px-3 border border-slate-200 rounded-lg focus:ring-1 focus:ring-blue-500 focus:outline-none bg-white text-slate-800 font-mono text-left"
+                  dir="ltr"
+                />
+                <button
+                  onClick={handleSaveChatId}
+                  disabled={savingChatId}
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer disabled:bg-slate-350 shrink-0"
+                >
+                  {savingChatId ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+                  <span>حفظ</span>
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 leading-normal text-right">
+                للحصول على رقمك، افتح تيليجرام وأرسل أي رسالة لـ <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline font-bold font-mono">@userinfobot</a>
+              </p>
+              
+              {chatIdSaveSuccess && (
+                <p className="text-[11px] text-emerald-600 font-bold bg-emerald-50/50 p-1.5 rounded-lg text-center font-sans animate-pulse">
+                  تم حفظ Chat ID بنجاح
+                </p>
+              )}
+              {chatIdSaveError && (
+                <p className="text-[11px] text-rose-650 font-bold bg-rose-50/50 p-1.5 rounded-lg text-center font-sans">
+                  {chatIdSaveError}
+                </p>
+              )}
             </div>
 
             <div className="flex gap-2 items-center">
