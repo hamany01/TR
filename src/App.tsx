@@ -102,7 +102,7 @@ export default function App() {
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold text-lg text-slate-800 tracking-tight font-sans">منصة تذكير</span>
-                  <span className="text-[9px] md:text-[10px] font-mono bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full font-bold">v2.0.0</span>
+                  <span className="text-[9px] md:text-[10px] font-mono bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full font-bold">v2.1.0</span>
                 </div>
                 <span className="text-[10px] text-slate-400 block -mt-1">نظام جدولة التنبيهات المخصص (SaaS)</span>
               </div>
@@ -191,7 +191,7 @@ export default function App() {
               <span>•</span>
               <a href="#" className="hover:text-amber-500 transition">المستند التقني للبايثون</a>
             </div>
-            <p className="text-slate-500 mt-2">© {new Date().getFullYear()} منصة تذكير (إصدار v2.0.0). جميع الحقوق محفوظة.</p>
+            <p className="text-slate-500 mt-2">© {new Date().getFullYear()} منصة تذكير (إصدار v2.1.0). جميع الحقوق محفوظة.</p>
           </div>
         </div>
       </footer>
