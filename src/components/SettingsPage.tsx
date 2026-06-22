@@ -115,22 +115,21 @@ export default function SettingsPage({
 
   const handleTestBrowserNotification = () => {
     if (!("Notification" in window)) {
-      setBrowserTestStatus("⚠️ متصفحك لا يدعم إشعارات الويب.");
+      alert("هذا المتصفح لا يدعم الإشعارات");
       return;
     }
-
-    if (Notification.permission === "granted") {
-      new Notification("🔔 إشعار اختبار منصة تذكير!", {
-        body: "إذا ظهر لك هذا الإشعار، فهذا يعني أن نظام التنبيهات يعمل بنجاح في متصفحك الحالي! 🎉",
-        icon: "/favicon.ico",
-        dir: "rtl"
-      });
-      setBrowserTestStatus("✅ تم إطلاق إشعار الاختبار بنجاح في متصفحك!");
-      setTimeout(() => setBrowserTestStatus(""), 4000);
-    } else {
-      setBrowserTestStatus("⚠️ يرجى تفعيل أو منح صلاحية إشعارات المتصفح أولاً بالضغط على زر التفعيل!");
-      setTimeout(() => setBrowserTestStatus(""), 5000);
+    if (Notification.permission !== "granted") {
+      alert('يرجى منح إذن الإشعارات أولاً بالضغط على زر "طلب في المتصفح"');
+      return;
     }
+    new Notification("🔔 اختبار منصة تذكير", {
+      body: "هذا إشعار تجريبي — النظام يعمل بشكل صحيح!",
+      icon: "/favicon.ico",
+      tag: "test-notification",
+      requireInteraction: false,
+    });
+    setBrowserTestStatus("✅ تم إطلاق إشعار الاختبار بنجاح في متصفحك!");
+    setTimeout(() => setBrowserTestStatus(""), 4000);
   };
 
   React.useEffect(() => {
@@ -518,41 +517,83 @@ if __name__ == '__main__':
 
           {/* Chrome Notifications */}
           <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between border-b border-slate-50 pb-3">
               <span className="flex items-center gap-2 font-bold text-sm text-slate-800">
                 <Chrome className="w-5 h-5 text-amber-500" />
                 <span>إشعارات المتصفح (Chrome/Edge)</span>
               </span>
-              <button
-                onClick={requestBrowserPermission}
-                className={`text-xs px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
-                  browserNotification 
-                    ? "bg-emerald-50 text-emerald-800 cursor-default" 
-                    : "bg-amber-600 text-white hover:bg-amber-700 focus:ring-2 focus:ring-amber-500"
-                }`}
-                disabled={browserNotification}
-              >
-                {browserNotification ? "نشطة ✅" : "طلب في المتصفح"}
-              </button>
+              
+              {/* Show button if permission is default */}
+              {browserPermissionState === "default" && (
+                <button
+                  onClick={requestBrowserPermission}
+                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs px-4 py-2 rounded-xl font-bold transition focus:ring-2 focus:ring-amber-500 shadow-sm cursor-pointer"
+                >
+                  طلب في المتصفح
+                </button>
+              )}
+
+              {/* Show active disabled state if granted */}
+              {browserPermissionState === "granted" && (
+                <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>مفعّل ✅</span>
+                </span>
+              )}
+
+              {/* Show error indicator if denied */}
+              {browserPermissionState === "denied" && (
+                <span className="text-xs bg-rose-50 text-rose-700 border border-rose-105 px-3 py-1.5 rounded-xl font-bold" title="يرجى تمكين الصلاحية من المتصفح">
+                  محجوب ⛔
+                </span>
+              )}
             </div>
 
-            {/* Browser permission details */}
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 divide-y divide-slate-100 space-y-1.5 text-xs text-slate-600">
-              <div className="flex justify-between items-center">
-                <span>حالة الإذن الحالية:</span>
-                <span className="font-mono font-bold bg-white border px-2 py-0.5 rounded text-slate-800">
-                  {browserPermissionState}
-                </span>
+            {/* Dynamic Status Alert based on permission state */}
+            {browserPermissionState === "default" && (
+              <div className="p-3 bg-amber-50/60 border border-amber-250/50 rounded-xl text-right">
+                <p className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                  <span>لم يُمنح الإذن بعد</span>
+                </p>
+                <p className="text-[10px] text-amber-750/90 mt-1 leading-relaxed">
+                  الرجاء النقر على زر <strong>طلب في المتصفح</strong> بالأعلى للسماح باستقبال التذكيرات الفورية بمجرد حلول موعد الحدث.
+                </p>
               </div>
-              <div className="pt-1.5 flex justify-between items-center text-[10px]">
-                <span className="text-slate-400">تنبيهات حالة الإذن:</span>
-                <span className="text-slate-500">
-                  {browserPermissionState === "granted" && "مسموح بها بالكامل وسلسة 🎉"}
-                  {browserPermissionState === "denied" && "مرفوضة! يرجى إعادة تفعيلها من موقع المتصفح."}
-                  {browserPermissionState === "default" && "لم تمنح الصلاحية بعد. انقر 'طلب' للأعلى."}
-                </span>
+            )}
+
+            {browserPermissionState === "granted" && (
+              <div className="p-3 bg-emerald-50/55 border border-emerald-250/50 rounded-xl text-right">
+                <p className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span>✅ مفعّل</span>
+                </p>
+                <p className="text-[10px] text-emerald-750/90 mt-1 leading-relaxed">
+                  تنبيهات المتصفح نشطة وسلسة بالكامل وسيبث لك النظام إشعارًا فوريًا لكل موعد طالما كانت نافذة المنصة مفتوحة بالخلفية.
+                </p>
               </div>
-            </div>
+            )}
+
+            {browserPermissionState === "denied" && (
+              <div className="p-4 bg-rose-50/65 border border-rose-250/50 rounded-xl text-right space-y-2">
+                <p className="text-xs font-bold text-rose-800 flex items-center gap-1.5 leading-relaxed">
+                  <span>⛔ محجوب — يرجى تغييره من إعدادات المتصفح</span>
+                </p>
+                <p className="text-[10px] text-rose-750/90 leading-relaxed">
+                  تم حظر صلاحية الإشعارات مسبقاً لهذا الموقع من خلال متصفحك. يرجى النقر على أيقونة القفل أو لوحة الإعدادات بجانب شريط العنوان في الأعلى، ثم غيّر خيار الإشعارات إلى <strong>"السماح" (Allow)</strong>.
+                </p>
+                <div className="pt-0.5">
+                  <a 
+                    href="https://support.google.com/chrome/answer/3220216" 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 hover:underline font-bold"
+                  >
+                    <span>📖 اضغط هنا لفتح دليل شرح تفعيل الإشعارات بالمتصفح</span>
+                  </a>
+                </div>
+              </div>
+            )}
 
             <p className="text-[11px] text-slate-500 leading-normal font-normal">
               تظهر هذه الإشعارات في زاوية الشاشة بمجرد مطابقة أي تذكير، طالما كان تبويب المنصة مفتوحاً في الخلفية.

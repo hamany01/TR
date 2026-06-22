@@ -176,19 +176,30 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   // Request chrome browser notifications permission
   const requestBrowserPermission = async () => {
     if (!("Notification" in window)) {
-      alert("متصفحك الحالي لا يدعم إشعارات الويب.");
+      alert("هذا المتصفح لا يدعم الإشعارات");
       return;
     }
-    const permission = await Notification.requestPermission();
-    setBrowserPermissionState(permission);
-    if (permission === "granted") {
-      setBrowserNotification(true);
-      new Notification("تم تفعيل تنبيهات المتصفح بنجاح!", {
-        body: "منصة تذكير: ستصلك التنبيهات في وقتها عندما تكون الصفحة مفتوحة.",
-        dir: "rtl"
-      });
-    } else {
+    if (Notification.permission === "denied") {
+      alert("تم حجب الإشعارات. افتح إعدادات الموقع من شريط العنوان وغيّر الإشعارات إلى السماح يدوياً.");
+      setBrowserPermissionState("denied");
       setBrowserNotification(false);
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setBrowserPermissionState(permission);
+      if (permission === "granted") {
+        setBrowserNotification(true);
+        new Notification("منصة تذكير ✅", {
+          body: "تم تفعيل إشعارات المتصفح بنجاح!",
+          icon: "/favicon.ico",
+        });
+      } else {
+        setBrowserNotification(false);
+        alert("لم يتم منح الإذن. يرجى السماح يدوياً من إعدادات المتصفح.");
+      }
+    } catch (err) {
+      console.error("Error setting notification permission:", err);
     }
   };
 
